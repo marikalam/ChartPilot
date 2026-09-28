@@ -11,8 +11,8 @@ Cost guide at Claude Opus 5.5 list prices ($4 / $20 per million input/output tok
 
 ## 2. Deploy on Render
 
-1. Go to [render.com](https://render.com) and sign up with GitHub.
-2. **New → Blueprint**, then select the `marikalam/ChartPilot` repository. Render reads `render.yaml`.
+1. Open **[Deploy to Render](https://render.com/deploy?repo=https://github.com/marikalam/chartpilot)** and sign in with GitHub. The first time, allow Render to access the private `chartpilot` repo. Render reads `render.yaml`.
+2. (Or do it by hand: render.com → **New → Blueprint** → select `marikalam/chartpilot`.)
 3. Fill in the secret environment variables:
    - `ANTHROPIC_API_KEY`: the key from step 1 (required)
    - `APP_PASSCODE`: a passcode colleagues type once per device (strongly recommended, because the URL is public)

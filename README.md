@@ -39,7 +39,9 @@ Optional environment variables: `APP_PASSCODE`, `CLAUDE_MODEL` (default `claude-
 
 ## Deploy
 
-See [DEPLOY.md](DEPLOY.md). It's one Render blueprint and about five minutes of work.
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/marikalam/chartpilot)
+
+Click the button, sign in to Render with GitHub, paste your `ANTHROPIC_API_KEY`, choose an `APP_PASSCODE`, and deploy. [DEPLOY.md](DEPLOY.md) has the details.
 
 ## Important
 
