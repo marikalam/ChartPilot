@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Library, ServerConfig } from './lib/types';
 import { checkPasscode, getConfig, setPasscode } from './lib/api';
 import { emptyLibrary, loadLibrary, saveLibrary } from './lib/store';
+import { setModel } from './lib/ai/claude';
 import { ScreenPage, emptyScreen, type ScreenState } from './pages/Screen';
 import { WriteUpPage, emptyWriteUp, type WriteUpState } from './pages/WriteUp';
 import { LibraryPage } from './pages/Library';
@@ -35,9 +36,12 @@ export default function App() {
     getConfig()
       .then(async (c) => {
         setConfig(c);
+        setModel(c.model);
         setUnlocked(!c.passcodeRequired || (await checkPasscode()));
       })
-      .catch(() => setConfigError('Could not reach the ChartPilot server.'));
+      .catch(() =>
+        setConfigError('Can’t reach the ChartPilot server. If you just set this up, deploy the Cloudflare Worker first (see DEPLOY.md in the repo).'),
+      );
     loadLibrary().then((l) => {
       setLibrary(l);
       setLoaded(true);
@@ -84,7 +88,7 @@ export default function App() {
       </header>
 
       {!config.apiKeyConfigured && (
-        <div className="alert warn page-alert">The server has no ANTHROPIC_API_KEY set, so requests will fail. See DEPLOY.md.</div>
+        <div className="alert warn page-alert">The Worker has no ANTHROPIC_API_KEY secret set, so requests will fail. See DEPLOY.md.</div>
       )}
 
       <main>

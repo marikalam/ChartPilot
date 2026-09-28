@@ -1,25 +1,48 @@
 # Deploying ChartPilot
 
-ChartPilot runs as a single Docker service (API plus built frontend) on **Render**. It has no database: the rulebook and style library live in each user's browser.
+ChartPilot has two parts, set up the same way as KachunQuizer.ai:
+
+- **The app:** static files served by GitHub Pages at `marikalam.github.io/apps/chartpilot/`, from the `chartpilot/` folder of the `apps` repo's `gh-pages` branch.
+- **The proxy:** a Cloudflare Worker, `chartpilot-proxy`, that holds the Anthropic API key. The app expects it at `https://chartpilot-proxy.marikalam.workers.dev`.
+
+Both are free. The app is already published; the Worker needs the one-time setup below.
 
 ## 1. Get an Anthropic API key
 
 1. Go to [console.anthropic.com](https://console.anthropic.com), sign in, and add billing.
-2. **API Keys → Create key.** Copy it (starts with `sk-ant-`). You'll paste it into Render in the next step.
+2. **API Keys → Create key.** Copy it (starts with `sk-ant-`). You'll paste it into Cloudflare, never into the app or the repo.
 
 Cost guide at Claude Opus 5.5 list prices ($4 / $20 per million input/output tokens): a screening against a ~250k-token rulebook costs about $2 the first time in an hour (writing the cache) and roughly $0.10–0.25 after that while the cache is warm. A full write-up (draft, evidence review, final note) usually costs a few tens of cents. The app shows the estimate under every result.
 
-## 2. Deploy on Render
+## 2. Create the Worker
 
-1. Open **[Deploy to Render](https://render.com/deploy?repo=https://github.com/marikalam/chartpilot)** and sign in with GitHub. The first time, allow Render to access the private `chartpilot` repo. Render reads `render.yaml`.
-2. (Or do it by hand: render.com → **New → Blueprint** → select `marikalam/chartpilot`.)
-3. Fill in the secret environment variables:
-   - `ANTHROPIC_API_KEY`: the key from step 1 (required)
-   - `APP_PASSCODE`: a passcode colleagues type once per device (strongly recommended, because the URL is public)
-   - `EVIDENCE_API_URL` / `EVIDENCE_API_KEY`: leave blank unless you have an external evidence engine (below)
-4. **Deploy Blueprint.** When it's live, open the `https://chartpilot-….onrender.com` URL.
+Pick either option.
 
-The free plan sleeps after inactivity, so the first request after a pause takes about 30–60 seconds to wake up. The Starter plan avoids that.
+### Option A: Cloudflare dashboard (no command line)
+
+1. Go to [dash.cloudflare.com](https://dash.cloudflare.com) → **Workers & Pages → Create → Create Worker** (start from "Hello World").
+2. Name it **`chartpilot-proxy`** exactly, so the URL matches what the app expects, then **Deploy**.
+3. **Edit code:** replace everything with the contents of [`worker/src/index.js`](worker/src/index.js), then **Deploy**.
+4. Go to **Settings → Variables and Secrets** and add, as type **Secret**:
+   - `ANTHROPIC_API_KEY`: the key from step 1
+   - `APP_PASSCODE`: a passcode colleagues type once per device. Strongly recommended, because the page is public.
+
+### Option B: command line
+
+```bash
+cd worker
+npm install
+npx wrangler login                          # opens the browser once
+npx wrangler deploy
+npx wrangler secret put ANTHROPIC_API_KEY   # paste the key when prompted
+npx wrangler secret put APP_PASSCODE        # choose a passcode
+```
+
+### Check it
+
+Open `https://chartpilot-proxy.marikalam.workers.dev/config`. It should show `"apiKeyConfigured":true`. Then open [the app](https://marikalam.github.io/apps/chartpilot/) and enter the passcode.
+
+If your workers.dev subdomain isn't `marikalam`, the Worker URL will differ. In that case either rebuild the app with `VITE_PROXY_URL=<your worker URL>`, or ask Claude to update it.
 
 ## 3. First-time setup in the app
 
@@ -27,8 +50,16 @@ The free plan sleeps after inactivity, so the first request after a pause takes 
 2. **Library → Note styles:** write your personal style, then add one profile per hospital with its template, style rules and 2–5 de-identified example notes.
 3. **Library → Settings & backup → Export library:** share this file with the group so everyone works from the same rulebook.
 
+## Updating the app
+
+```bash
+cd client && npm run build      # builds for /apps/chartpilot/
+```
+
+Copy `client/dist/*` into the `chartpilot/` folder of the `apps` repo's `gh-pages` branch and push. Changes to the Worker are redeployed with `npx wrangler deploy`, or by pasting `worker/src/index.js` into the dashboard editor again.
+
 ## Connecting OpenEvidence (the open action item)
 
-The evidence step goes through a small adapter (`server/src/routes/evidence.ts`, `callExternal`), so any evidence engine with an HTTP API can replace the built-in review with no UI changes. When `EVIDENCE_API_URL` is set, **Library → Settings → External evidence engine** becomes selectable.
+The evidence step can go to any evidence engine with an HTTP API instead of Claude. Add the Worker secrets `EVIDENCE_API_URL` (and `EVIDENCE_API_KEY` if needed), and **Library → Settings → External evidence engine** becomes selectable.
 
-The adapter currently sends `POST {question, context}` with `Authorization: Bearer $EVIDENCE_API_KEY` and expects `{answer, sources?: [{url, title}]}`. OpenEvidence doesn't publish a self-serve public API that we could verify. Ask them (or your institution's OpenEvidence contact) about API or enterprise access. Once you have their API docs, adjusting the request/response mapping in `callExternal` takes a few lines. Until then, the built-in Claude review with guideline/literature search covers the same step without the copy and paste.
+The Worker forwards `POST {question, context}` to that URL with `Authorization: Bearer $EVIDENCE_API_KEY`, and the app expects `{answer, sources?: [{url, title}]}` back (`client/src/lib/ai/evidence.ts`). OpenEvidence doesn't publish a self-serve public API that we could verify. Ask them (or your institution's OpenEvidence contact) about API or enterprise access. Once you have their API docs, adjusting the mapping takes a few lines. Until then, the built-in Claude review with guideline/literature search covers the same step without the copy and paste.

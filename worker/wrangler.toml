@@ -1,0 +1,14 @@
+name = "chartpilot-proxy"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+[vars]
+# Browsers allowed to call this Worker (comma-separated)
+ALLOWED_ORIGINS = "https://marikalam.github.io,http://localhost:5173"
+CLAUDE_MODEL = "claude-opus-5-5"
+
+# Secrets (set with `npx wrangler secret put NAME`, never committed):
+#   ANTHROPIC_API_KEY  - required
+#   APP_PASSCODE       - strongly recommended; colleagues enter it once per device
+#   EVIDENCE_API_URL   - optional external evidence engine (e.g. OpenEvidence)
+#   EVIDENCE_API_KEY   - optional, sent as a Bearer token to EVIDENCE_API_URL

@@ -12,36 +12,35 @@ AI support for the hospitalist and observation-unit workflow, built on Claude. I
 
 ## How it's put together
 
+Live at **[marikalam.github.io/apps/chartpilot](https://marikalam.github.io/apps/chartpilot/)**, alongside [the other apps](https://marikalam.github.io/#projects).
+
 | | |
 |---|---|
-| Frontend | React + Vite (`client/`) |
-| Backend | Node + Express + TypeScript (`server/`), stateless |
-| AI | Claude Opus 5.5 via the Anthropic SDK. Adaptive thinking, structured outputs for screening, streaming for notes, server-side web search for evidence |
-| Hosting | One Docker service on Render (`render.yaml`) |
+| App | React + Vite (`client/`), a static site on GitHub Pages. It builds the Claude requests in the browser with the Anthropic SDK. |
+| Proxy | A Cloudflare Worker (`worker/`) that checks the passcode, adds the Anthropic API key and streams bytes through. The key never reaches the browser. |
+| AI | Claude Opus 5.5: adaptive thinking, structured outputs for screening, streaming for notes, server-side web search for evidence |
+
+This is the same setup as KachunQuizer.ai. The Worker never parses request bodies, so even a several-megabyte rulebook costs it almost no CPU, and it fits Cloudflare's free plan.
 
 Design choices that came out of the original workflow discussion:
 
 - **Token efficiency.** The rulebook is sent as a cached prompt prefix (1-hour cache), so the first screening of a shift pays to cache the full manual and later ones read it at a small fraction of the price. Each request shows its token usage and approximate cost. For write-ups, only the selected hospital's profile is sent, not every hospital's files.
 - **The rulebook is a tree of overlapping documents.** Upload any number of files (Word, PDF, text, Markdown) and put them in priority order. When documents conflict, the higher one wins and the conflict is reported.
 - **Group sharing.** Library → Settings & backup exports the rulebook and style profiles as one JSON file. The nocturnist group can pass around a single current version and import it.
-- **No patient data at rest.** The server stores and logs nothing. The browser keeps the library in IndexedDB. Patient text stays in memory and is gone on reload.
-- **Access control.** An optional shared passcode (`APP_PASSCODE`) keeps a public URL from spending your API key.
+- **No patient data at rest.** The Worker stores and logs nothing. The browser keeps the library in IndexedDB. Patient text stays in memory and is gone on reload.
+- **Access control.** A shared passcode (`APP_PASSCODE`, a Worker secret) keeps the public page from spending your API key. Only the listed site origins can call the Worker.
 
 ## Run locally
 
 ```bash
 npm install && npm run install:all
-export ANTHROPIC_API_KEY=sk-ant-...        # server reads it from the environment
-npm run dev                                 # API on :4000, app on http://localhost:5173
+cd worker && printf 'ANTHROPIC_API_KEY=sk-ant-...\n' > .dev.vars && cd ..   # local secret, git-ignored
+npm run dev        # Worker on :8787, app on http://localhost:5173
 ```
-
-Optional environment variables: `APP_PASSCODE`, `CLAUDE_MODEL` (default `claude-opus-5-5`), `EVIDENCE_API_URL` / `EVIDENCE_API_KEY`.
 
 ## Deploy
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/marikalam/chartpilot)
-
-Click the button, sign in to Render with GitHub, paste your `ANTHROPIC_API_KEY`, choose an `APP_PASSCODE`, and deploy. [DEPLOY.md](DEPLOY.md) has the details.
+See [DEPLOY.md](DEPLOY.md): a one-time Cloudflare Worker setup, then the app is a static build on GitHub Pages.
 
 ## Important
 

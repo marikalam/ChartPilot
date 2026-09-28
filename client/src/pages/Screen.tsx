@@ -1,6 +1,8 @@
 import { useRef, useState } from 'react';
 import type { Library, ScreeningResult, Usage, Citation } from '../lib/types';
-import { streamPost, estimateTokens } from '../lib/api';
+import { estimateTokens } from '../lib/api';
+import { runScreening } from '../lib/ai/screening';
+import { describeError } from '../lib/ai/claude';
 import { DictationButton, appendText } from '../components/Dictation';
 import { CopyButton, ErrorBox, UsageLine, Working } from '../components/common';
 
@@ -37,21 +39,14 @@ export function ScreenPage({
     setState((s) => ({ ...s, result: null, usage: null }));
     abort.current = new AbortController();
     try {
-      await streamPost(
-        '/api/screen',
-        {
-          rulebook: docs.map((d) => ({ name: d.name, text: d.text })),
-          patient: state.patient,
-          context: state.context,
-        },
-        {
-          onStatus: setPhase,
-          onResult: (d) => setState((s) => ({ ...s, result: d.result, usage: d.usage, model: d.model })),
-        },
+      const out = await runScreening(
+        { rulebook: docs.map((d) => ({ name: d.name, text: d.text })), patient: state.patient, context: state.context },
+        setPhase,
         abort.current.signal,
       );
+      setState((s) => ({ ...s, result: out.result, usage: out.usage, model: out.model }));
     } catch (e) {
-      if ((e as Error).name !== 'AbortError') setError((e as Error).message);
+      if (!abort.current?.signal.aborted) setError(describeError(e));
     } finally {
       setPhase(null);
     }

@@ -1,20 +1,11 @@
-import { z } from 'zod';
-
-export const DocSchema = z.object({
-  name: z.string().max(300),
-  text: z.string(),
-});
-export type Doc = z.infer<typeof DocSchema>;
+export type NamedText = { name: string; text: string };
 
 // Deterministic rendering: same documents in the same order produce the same
 // bytes, which is what keeps the prompt cache hitting.
-export function renderDocuments(label: string, docs: Doc[]): string {
+export function renderDocuments(label: string, docs: NamedText[]): string {
   const body = docs
     .filter((d) => d.text.trim())
-    .map(
-      (d, i) =>
-        `<document index="${i + 1}" name="${escapeAttr(d.name)}">\n${d.text.trim()}\n</document>`,
-    )
+    .map((d, i) => `<document index="${i + 1}" name="${escapeAttr(d.name)}">\n${d.text.trim()}\n</document>`)
     .join('\n\n');
   return `<${label}>\n${body}\n</${label}>`;
 }

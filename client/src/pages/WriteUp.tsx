@@ -1,7 +1,9 @@
 import { useRef, useState } from 'react';
 import type { Library, Usage, Settings } from '../lib/types';
 import { NOTE_TYPES } from '../lib/types';
-import { streamPost } from '../lib/api';
+import { draftNote, finalizeNote } from '../lib/ai/notes';
+import { evidenceReview } from '../lib/ai/evidence';
+import { describeError, type TextResult } from '../lib/ai/claude';
 import { DictationButton, appendText } from '../components/Dictation';
 import { CopyButton, ErrorBox, FlagSummary, Markdown, Sources, UsageLine, Working } from '../components/common';
 
@@ -88,49 +90,47 @@ export function WriteUpPage({
         patch({ [step]: out } as Partial<WriteUpState>);
       }
     };
-    const onDone = (d: { usage: Usage | null; model: string; truncated?: boolean; sources: { url: string; title: string }[] }) => {
+    const onDone = (d: TextResult) => {
       setState((s) => ({
         ...s,
-        meta: { ...s.meta, [step]: { usage: d.usage, model: d.model } },
+        meta: { ...s.meta, [step]: { usage: d.model === 'external' ? null : d.usage, model: d.model } },
         ...(step === 'evidence' ? { sources: d.sources } : {}),
       }));
       if (d.truncated) setError('The output hit the length limit and was cut off.');
     };
+    const handlers = { onStatus: setPhase, onText };
 
     if (step === 'draft') {
-      await streamPost(
-        '/api/notes/draft',
-        {
-          personalStyle: library.personalStyle,
-          site: site
-            ? {
-                name: site.name,
-                styleGuide: site.styleGuide,
-                template: site.template,
-                examples: site.examples.map((e) => ({ name: e.name, text: e.text })),
-              }
-            : { name: 'General', styleGuide: '', template: '', examples: [] },
-          noteType,
-          dictation: state.dictation,
-          data: state.data,
-        },
-        { onStatus: setPhase, onText, onDone },
-        signal,
+      onDone(
+        await draftNote(
+          {
+            personalStyle: library.personalStyle,
+            site: site
+              ? {
+                  name: site.name,
+                  styleGuide: site.styleGuide,
+                  template: site.template,
+                  examples: site.examples.map((e) => ({ name: e.name, text: e.text })),
+                }
+              : { name: 'General', styleGuide: '', template: '', examples: [] },
+            noteType,
+            dictation: state.dictation,
+            data: state.data,
+          },
+          handlers,
+          signal,
+        ),
       );
     } else if (step === 'evidence') {
-      await streamPost(
-        '/api/evidence',
-        { caseText: input.draft ?? state.draft, question: state.question, provider, webSearch: settings.webSearch },
-        { onStatus: setPhase, onText, onDone },
-        signal,
+      onDone(
+        await evidenceReview(
+          { caseText: input.draft ?? state.draft, question: state.question, provider, webSearch: settings.webSearch },
+          handlers,
+          signal,
+        ),
       );
     } else {
-      await streamPost(
-        '/api/notes/finalize',
-        { draft: input.draft ?? state.draft, evidence: input.evidence ?? state.evidence },
-        { onStatus: setPhase, onText, onDone },
-        signal,
-      );
+      onDone(await finalizeNote({ draft: input.draft ?? state.draft, evidence: input.evidence ?? state.evidence }, handlers, signal));
     }
     return out;
   }
@@ -147,7 +147,7 @@ export function WriteUpPage({
         if (step === 'evidence') evidence = out;
       }
     } catch (e) {
-      if ((e as Error).name !== 'AbortError') setError((e as Error).message);
+      if (!abort.current?.signal.aborted) setError(describeError(e));
     } finally {
       setRunning(null);
       setPhase(null);
